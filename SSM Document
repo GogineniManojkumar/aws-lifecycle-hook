@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.2",
+  "description": "Backup logs to S3",
+  "parameters": {
+     "ASGNAME":{
+      "type":"String",
+      "description":"Auto Scaling group name"
+    },
+     "LIFECYCLEHOOKNAME":{
+      "type":"String",
+      "description":"LIFECYCLEHOOK name"
+    },
+     "BACKUPDIRECTORY":{
+      "type":"String",
+      "description":"BACKUPDIRECTORY localtion in server"
+    },
+     "S3BUCKET":{
+      "type":"String",
+      "description":"S3BUCKET backup logs"
+    },
+     "SNSTARGET":{
+      "type":"String",
+      "description":"SNSTARGET"
+    }
+  },
+  "runtimeConfig": {
+    "aws:runShellScript": {
+      "properties": [
+        {
+          "id": "0.aws:runShellScript",
+          "runCommand": [
+            "",
+            "#!/bin/bash ",
+            "INSTANCEID=$(curl http://169.254.169.254/latest/meta-data/instance-id)",
+            "HOOKRESULT='CONTINUE'",
+            "REGION=$(curl -s 169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')",
+            "MESSAGE=''",
+            "",
+            "if [ -d \"{{BACKUPDIRECTORY}}\" ];",
+            "then",
+            "tar -cf /tmp/${INSTANCEID}.tar {{BACKUPDIRECTORY}} &> /tmp/backup",
+            "if [ $? -ne 0 ]",
+            "then",
+            "   MESSAGE=$(cat /tmp/backup)",
+                "echo $MESSAGE",
+            "else",
+            "   aws s3 cp /tmp/${INSTANCEID}.tar s3://{{S3BUCKET}}/{{ASGNAME}}/${INSTANCEID}/ &> /tmp/backup",
+            "       MESSAGE=$(cat /tmp/backup)",
+                     "echo $MESSAGE",
+            "fi",
+            "else",
+            " MESSAGE= \"{{BACKUPDIRECTORY}}\" directory Not exits in this server ",
+            "echo $MESSAGE",
+            "fi",
+            "",
+            "aws sns publish --subject ' Report-Logs_backup-{{ASGNAME}} ' --message \"$MESSAGE\"  --target-arn {{SNSTARGET}} --region ${REGION}",
+            "aws autoscaling complete-lifecycle-action --lifecycle-hook-name {{LIFECYCLEHOOKNAME}} --auto-scaling-group-name {{ASGNAME}} --lifecycle-action-result ${HOOKRESULT} --instance-id ${INSTANCEID}  --region ${REGION}"
+          ]
+        }
+      ]
+    }
+  }
+}
